@@ -1,40 +1,62 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 )
 
 const network = "tcp"
 const defaultPort = ":8080"
 
 func main() {
-	fmt.Println("Start dv-webserver")
-	defer fmt.Println("Stopped dv-webserver")
+	fmt.Println("=> Start dv-webserver")
+	defer fmt.Println("=> Stopped dv-webserver")
 
-	address := getAddress()
-	listener, err := net.Listen(network, address)
-	defer func() {
-		if err := listener.Close(); err != nil {
-			log.Fatalf("Listener close error=%s\n", err)
-		}
-	}()
-	if err != nil {
-		log.Fatalf("ListenIP error=%s\n", err)
-	}
+	listener := start()
 
-	fmt.Printf("=> Listening on %s\n", address)
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
+	go handleShutdownSignal(stop, listener)
+
+	doListen(listener)
+}
+
+func doListen(listener net.Listener) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
 			fmt.Printf("Accept error=%s\n", err)
-			continue
+			break
 		}
 		go processConn(conn)
+	}
+}
+
+func start() net.Listener {
+	address := getAddress()
+	listener, err := net.Listen(network, address)
+	if err != nil {
+		log.Fatalf("ListenIP error=%s\n", err)
+	}
+	fmt.Printf("=> Listening on %s\n", address)
+	return listener
+}
+
+func handleShutdownSignal(stop chan os.Signal, listener net.Listener) {
+	<-stop
+	fmt.Println("=> Signal received, shutting down...")
+	if err := listener.Close(); err != nil {
+		fmt.Printf("Listener close error=%s\n", err)
 	}
 }
 
