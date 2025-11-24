@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+const (
+	bufferSize      = 1024
+	defaultFilePath = "public/index.html"
+)
+
 type RequestDetails struct {
 	HttpVersion string
 	Method      string
@@ -26,7 +31,7 @@ func processConn(conn net.Conn) {
 	}(conn)
 
 	remoteAddress := conn.RemoteAddr().String()
-	buffer := make([]byte, 1024)
+	buffer := make([]byte, bufferSize)
 	n, err := conn.Read(buffer)
 	if err != nil {
 		fmt.Printf("Read error=%s\n", err)
@@ -38,22 +43,22 @@ func processConn(conn net.Conn) {
 		fmt.Printf("Parse error=%s\n", err)
 		return
 	}
-	fmt.Printf("=> Accepted connection from %s %s\n", remoteAddress, requestDetails)
+	fmt.Printf("=> Accepted connection from %s %+v\n", remoteAddress, requestDetails)
 
-	content, err := os.ReadFile("public/index.html")
-	if err != nil {
-		fmt.Printf("ReadFile error=%s\n", err)
+	if err := serveFileContent(conn); err != nil {
+		fmt.Printf("Serve file content error=%s\n", err)
 		return
 	}
-	_, _ = io.WriteString(conn, "HTTP/1.1 200 OK\r\n")
-	_, _ = io.WriteString(conn, "Content-Type: text/html\r\n\r\n")
-	_, _ = conn.Write(content)
+
 	fmt.Printf("=> Closed connection from %s\n", remoteAddress)
 }
 
 func parseRequest(request string) (*RequestDetails, error) {
-	fmt.Printf("=> Incoming raw request\n%s", request)
+	fmt.Printf("=> Incoming raw request\n%+v", request)
 	lines := strings.Split(request, "\n")
+	for i := range lines {
+		lines[i] = strings.TrimRight(lines[i], "\r")
+	}
 	if len(lines) >= 4 {
 		parts := strings.Split(lines[0], " ")
 		if len(parts) >= 3 {
@@ -68,4 +73,19 @@ func parseRequest(request string) (*RequestDetails, error) {
 		}
 	}
 	return nil, fmt.Errorf("invalid request %s", request[0:100]+" ...")
+}
+
+func serveFileContent(conn net.Conn) error {
+	content, err := os.ReadFile(defaultFilePath)
+	if err != nil {
+		return fmt.Errorf("ReadFile error=%s\n", err)
+	}
+	if _, err := io.WriteString(conn, "HTTP/1.1 200 OK\r\n"); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(conn, "Content-Type: text/html\r\n\r\n"); err != nil {
+		return err
+	}
+	_, err = conn.Write(content)
+	return err
 }
