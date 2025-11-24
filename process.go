@@ -10,6 +10,7 @@ import (
 
 const (
 	bufferSize      = 1024
+	publicDir       = "public"
 	defaultFilePath = "public/index.html"
 )
 
@@ -45,7 +46,7 @@ func processConn(conn net.Conn) {
 	}
 	fmt.Printf("=> Accepted connection from %s %+v\n", remoteAddress, requestDetails)
 
-	if err := serveFileContent(conn); err != nil {
+	if err := serveFileContent(conn, requestDetails.Path); err != nil {
 		fmt.Printf("Serve file content error=%s\n", err)
 		return
 	}
@@ -54,29 +55,28 @@ func processConn(conn net.Conn) {
 }
 
 func parseRequest(request string) (*RequestDetails, error) {
-	fmt.Printf("=> Incoming raw request\n%+v", request)
-	lines := strings.Split(request, "\n")
-	for i := range lines {
-		lines[i] = strings.TrimRight(lines[i], "\r")
+	requestLines := strings.Split(request, "\n")
+	for i := range requestLines {
+		requestLines[i] = strings.TrimRight(requestLines[i], "\r")
 	}
-	if len(lines) >= 4 {
-		parts := strings.Split(lines[0], " ")
-		if len(parts) >= 3 {
+	if len(requestLines) >= 4 {
+		firstLineParts := strings.Split(requestLines[0], " ")
+		if len(firstLineParts) >= 3 {
 			return &RequestDetails{
-				HttpVersion: parts[2],
-				Method:      parts[0],
-				Path:        parts[1],
-				Host:        lines[1],
-				UserAgent:   lines[2],
-				Accept:      lines[3],
+				HttpVersion: firstLineParts[2],
+				Method:      firstLineParts[0],
+				Path:        firstLineParts[1],
+				Host:        requestLines[1],
+				UserAgent:   requestLines[2],
+				Accept:      requestLines[3],
 			}, nil
 		}
 	}
 	return nil, fmt.Errorf("invalid request %s", request[0:100]+" ...")
 }
 
-func serveFileContent(conn net.Conn) error {
-	content, err := os.ReadFile(defaultFilePath)
+func serveFileContent(conn net.Conn, path string) error {
+	content, err := os.ReadFile(publicDir + path)
 	if err != nil {
 		return fmt.Errorf("ReadFile error=%s\n", err)
 	}
