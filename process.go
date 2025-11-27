@@ -2,16 +2,12 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"net"
-	"os"
 	"strings"
 )
 
 const (
-	bufferSize      = 1024
-	publicDir       = "public"
-	defaultFilePath = "public/index.html"
+	bufferSize = 1024
 )
 
 type RequestDetails struct {
@@ -46,10 +42,7 @@ func processConn(conn net.Conn) {
 	}
 	fmt.Printf("=> Accepted connection from %s %+v\n", remoteAddress, requestDetails)
 
-	if err := serveFileContent(conn, requestDetails.Path); err != nil {
-		fmt.Printf("Serve file content error=%s\n", err)
-		return
-	}
+	responseHandler(conn, requestDetails)
 
 	fmt.Printf("=> Closed connection from %s\n", remoteAddress)
 }
@@ -73,19 +66,4 @@ func parseRequest(request string) (*RequestDetails, error) {
 		}
 	}
 	return nil, fmt.Errorf("invalid request %s", request[0:100]+" ...")
-}
-
-func serveFileContent(conn net.Conn, path string) error {
-	content, err := os.ReadFile(publicDir + path)
-	if err != nil {
-		return fmt.Errorf("ReadFile error=%s\n", err)
-	}
-	if _, err := io.WriteString(conn, "HTTP/1.1 200 OK\r\n"); err != nil {
-		return err
-	}
-	if _, err := io.WriteString(conn, "Content-Type: text/html\r\n\r\n"); err != nil {
-		return err
-	}
-	_, err = conn.Write(content)
-	return err
 }
